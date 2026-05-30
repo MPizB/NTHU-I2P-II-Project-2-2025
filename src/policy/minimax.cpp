@@ -143,7 +143,6 @@ SearchResult MiniMax::search(
                 // keep this move if it is the best so far
                 best_score = score;
                 result.best_move = action;
-                result.score = best_score;
                 
                 if(p.report_partial && ctx.on_root_update){
                    ctx.on_root_update({result.best_move, best_score, depth, move_index + 1, total_moves});
@@ -154,8 +153,12 @@ SearchResult MiniMax::search(
 
     // [ Hackathon TODO 4-3 ]
     // update result and return
-
-        return result;
+    result.score = best_score;
+    result.nodes = ctx.nodes;
+    result.depth = depth;
+    result.seldepth = ctx.seldepth;
+    result.pv = {result.best_move};
+    return result;
 } 
 
 
