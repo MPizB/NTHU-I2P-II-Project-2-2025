@@ -174,7 +174,6 @@ int MiniMax::quiescence(
     });
 
     /* === Negamax loop === */
-    int best_score = M_MAX;
     bool is_first = true;
 
     for(const auto& sm : scored_moves){
@@ -233,7 +232,8 @@ int MiniMax::quiescence(
         }
         is_first = false;
     }
-
+    history.pop(state->hash());
+    return alpha;
     
 }
 
