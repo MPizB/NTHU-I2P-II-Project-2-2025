@@ -1,6 +1,7 @@
 #include <utility>
 #include "114006214_state.hpp"
 #include "114006214_submission.hpp"
+#include <algorithm>
 
 
 /*============================================================
@@ -8,7 +9,12 @@
  *
  * Negamax without pruning. Caller manages memory.
  *============================================================*/
-int MiniMax::eval_ctx(
+struct ScoredMove {
+    Move move;
+    int score;
+};
+
+ int MiniMax::eval_ctx(
     State *state,
     int depth,
     int alpha, // alpha-beta pruning
@@ -59,13 +65,42 @@ int MiniMax::eval_ctx(
         return score;
     }
 
+    //Move ordering (MVV - LVA)
+    std::vector<ScoredMove> scored_moves;
+    scored_moves.reserve(state->legal_actions.size());
+
+    int us = state->player;
+    int them = 1 - us;
+
+    for (const auto& action : state->legal_actions) {
+        int score = 0;
+        Point from = action.first;
+        Point to = action.second;
+
+        // Identify attacker & victim
+        int attacker = state->piece_at(us, from.first, from.second);
+        int victim = state->piece_at(them, to.first, to.second);
+
+        if (victim > 0) {
+            // MVV-LVA
+            score = 10000 + (PIECE_VALUES[victim] * 10) - PIECE_VALUES[attacker];
+        }
+
+        scored_moves.push_back({action, score});
+    }
+
+    std::sort(scored_moves.begin(), scored_moves.end(), [](const ScoredMove& a, const ScoredMove& b) {
+        return a.score > b.score;
+    });
+
     /* === Negamax loop === */
     int best_score = M_MAX;
+    bool is_first = true;
 
-    for(auto& action : state->legal_actions){
+    for(const auto& sm : scored_moves){
         // [ Hackathon TODO 3-2 ]
         // create the child state after applying action
-
+        Move action = sm.move;
         State* next = state->next_state(action);
 
         bool same = next->same_player_as_parent();
@@ -76,12 +111,31 @@ int MiniMax::eval_ctx(
         // convert raw to the current player's perspective.
         int score;
         if (same) {
-            //return maximum value
-            score = eval_ctx(next, depth - 1, alpha, beta, history, ply + 1, ctx, p);
+            if(is_first) {
+                //return maximum value
+                score = eval_ctx(next, depth - 1, alpha, beta, history, ply + 1, ctx, p);
+            }
+            else {
+                score = eval_ctx(next, depth - 1, alpha, alpha + 1, history, ply + 1, ctx, p);
+                if (score > alpha && score < beta) {
+                    score = eval_ctx(next, depth - 1, score, beta, history, ply + 1, ctx, p);
+                }
+            }
         }
         else {
-            //return minimum value
-            score = -eval_ctx(next, depth - 1, -beta, -alpha, history, ply + 1, ctx, p);
+            if(is_first) {
+                //return minimum value
+                score = -eval_ctx(next, depth - 1, -beta, -alpha, history, ply + 1, ctx, p);
+            }
+            else {
+                // Search subsequent moves with null window
+                score = -eval_ctx(next, depth - 1, -alpha - 1, -alpha, history, ply + 1, ctx, p);
+                
+                // If the move breaks our assumption (fail high), re-search it
+                if (score > alpha && score < beta) {
+                    score = -eval_ctx(next, depth - 1, -beta, -score, history, ply + 1, ctx, p);
+                }
+            }
         }
         
 
@@ -94,12 +148,13 @@ int MiniMax::eval_ctx(
         }
         
         if (alpha >= beta) {
-            break;
+            history.pop(state->hash());
+            return alpha;
         }
+        is_first = false;
     }
 
-    history.pop(state->hash());
-    return alpha;
+    
 }
 
 
@@ -129,19 +184,59 @@ SearchResult MiniMax::search(
     int move_index = 0;
     int total_moves = (int)state->legal_actions.size();
 
-    for(auto& action : state->legal_actions){
+    //Move ordering (MVV - LVA)
+    std::vector<ScoredMove> scored_moves;
+    scored_moves.reserve(total_moves);
+
+    int us = state->player;
+    int them = 1 - us;
+
+    for (const auto& action : state->legal_actions) {
+        int score = 0;
+        int attacker = state->piece_at(us, action.first.first, action.first.second);
+        int victim = state->piece_at(them, action.second.first, action.second.second);
+
+        if (victim > 0) {
+            score = 10000 + (PIECE_VALUES[victim] * 10) - PIECE_VALUES[attacker];
+        }
+        scored_moves.push_back({action, score});
+    }
+
+    std::sort(scored_moves.begin(), scored_moves.end(), [](const ScoredMove& a, const ScoredMove& b) {
+        return a.score > b.score;
+    });
+
+
+    bool is_first = true;
+    for(const auto& sm : scored_moves){
         /* [ Hackathon TODO 4-1 ]
          * search this move like TODO 3, but starting from the root */
+        Move action = sm.move;
+        
         State* next = state->next_state(action);
         bool same = next->same_player_as_parent();
         int score;
+
         if (same) {
-            //return maximum value
-            score = eval_ctx(next, depth - 1, alpha, beta, history, 1, ctx, p);
-        }
-        else {
-            //return minimum value
-            score = -eval_ctx(next, depth - 1, -beta, -alpha, history, 1, ctx, p);
+            if (is_first) {
+                //return maximum value
+                score = eval_ctx(next, depth - 1, alpha, beta, history, 1, ctx, p);
+            } else {
+                score = eval_ctx(next, depth - 1, alpha, alpha + 1, history, 1, ctx, p);
+                if (score > alpha && score < beta) {
+                    score = eval_ctx(next, depth - 1, score, beta, history, 1, ctx, p);
+                }
+            }
+        } else {
+            if (is_first) {
+                //return minimum value
+                score = -eval_ctx(next, depth - 1, -beta, -alpha, history, 1, ctx, p);
+            } else {
+                score = -eval_ctx(next, depth - 1, -alpha - 1, -alpha, history, 1, ctx, p);
+                if (score > alpha && score < beta) {
+                    score = -eval_ctx(next, depth - 1, -beta, -score, history, 1, ctx, p);
+                }
+            }
         }
         delete next;
 
@@ -156,6 +251,7 @@ SearchResult MiniMax::search(
                 }
             }  
         move_index++;
+        is_first = false;
     }
 
     // [ Hackathon TODO 4-3 ]
