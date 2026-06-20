@@ -11,6 +11,8 @@
 int MiniMax::eval_ctx(
     State *state,
     int depth,
+    int alpha, // alpha-beta pruning
+    int beta, // alpha-beta pruning
     GameHistory& history,
     int ply,
     SearchContext& ctx,
@@ -75,11 +77,11 @@ int MiniMax::eval_ctx(
         int score;
         if (same) {
             //return maximum value
-            score = eval_ctx(next, depth - 1, history, ply + 1, ctx, p);
+            score = eval_ctx(next, depth - 1, alpha, beta, history, ply + 1, ctx, p);
         }
         else {
             //return minimum value
-            score = -eval_ctx(next, depth - 1, history, ply + 1, ctx, p);
+            score = -eval_ctx(next, depth - 1, -beta, -alpha, history, ply + 1, ctx, p);
         }
         
 
@@ -87,13 +89,17 @@ int MiniMax::eval_ctx(
 
         // [ Hackathon TODO 3-5 ]
         // update best_score if this child is better.
-        if (score > best_score) {
-            best_score = score;
+        if (score > alpha) {
+            alpha = score;
+        }
+        
+        if (alpha >= beta) {
+            break;
         }
     }
 
     history.pop(state->hash());
-    return best_score;
+    return alpha;
 }
 
 
@@ -117,8 +123,9 @@ SearchResult MiniMax::search(
         state->get_legal_actions();
     }
 
+    int alpha = M_MAX; //(-100000)
+    int beta = P_MAX; //(+100000)
 
-    int best_score = M_MAX - 10;
     int move_index = 0;
     int total_moves = (int)state->legal_actions.size();
 
@@ -130,22 +137,22 @@ SearchResult MiniMax::search(
         int score;
         if (same) {
             //return maximum value
-            score = eval_ctx(next, depth - 1, history, 1, ctx, p);
+            score = eval_ctx(next, depth - 1, alpha, beta, history, 1, ctx, p);
         }
         else {
             //return minimum value
-            score = -eval_ctx(next, depth - 1, history, 1, ctx, p);
+            score = -eval_ctx(next, depth - 1, -beta, -alpha, history, 1, ctx, p);
         }
         delete next;
 
-            if(score > best_score){
+            if(score > alpha){
                 // [ Hackathon TODO 4-2 ]
                 // keep this move if it is the best so far
-                best_score = score;
+                alpha = score;
                 result.best_move = action;
                 
                 if(p.report_partial && ctx.on_root_update){
-                   ctx.on_root_update({result.best_move, best_score, depth, move_index + 1, total_moves});
+                   ctx.on_root_update({result.best_move, alpha, depth, move_index + 1, total_moves});
                 }
             }  
         move_index++;
@@ -153,7 +160,7 @@ SearchResult MiniMax::search(
 
     // [ Hackathon TODO 4-3 ]
     // update result and return
-    result.score = best_score;
+    result.score = alpha;
     result.nodes = ctx.nodes;
     result.depth = depth;
     result.seldepth = ctx.seldepth;
