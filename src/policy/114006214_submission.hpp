@@ -18,6 +18,16 @@ struct MMParams {
 
 class MiniMax{
 public:
+    //implement quiesence helper function
+    static int quiescence(
+        State *state,
+        int alpha,
+        int beta,
+        GameHistory& history,
+        int ply,
+        SearchContext& ctx,
+        const MMParams& p
+    );
     static int eval_ctx(
         State *state,
         int depth,

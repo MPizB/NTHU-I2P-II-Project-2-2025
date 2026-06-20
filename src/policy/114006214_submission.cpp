@@ -14,6 +14,87 @@ struct ScoredMove {
     int score;
 };
 
+int MiniMax::quiescence(
+    State *state,
+    int alpha,
+    int beta,
+    GameHistory& history,
+    int ply,
+    SearchContext& ctx,
+    const MMParams& p
+){
+    ctx.nodes++;
+    if(ply > ctx.seldepth){ ctx.seldepth = ply; }
+    if(ctx.stop){ return 0; }
+
+    //Standing Pat baseline
+    int standing_pat = state->evaluate(p.use_kp_eval, p.use_eval_mobility, &history);
+    
+    if (standing_pat >= beta) {
+        return standing_pat;
+    }
+    if (standing_pat > alpha) {
+        alpha = standing_pat;
+    }
+
+    /* === Lazy move generation (sets game_state) === */
+    if(state->legal_actions.empty() && state->game_state == UNKNOWN){
+        state->get_legal_actions();
+    }
+
+    // return the score for a winning terminal state
+    if(state->game_state == WIN) {
+        return P_MAX - ply;
+    }
+
+    if(state->game_state == DRAW){
+        return 0;
+    }
+
+    std::vector<ScoredMove> captures;
+    int us = state->player;
+    int them = 1 - us;
+
+    for (const auto& action : state->legal_actions) {
+        int victim = state->piece_at(them, action.second.first, action.second.second);
+        if (victim > 0) { // Only capture moves
+            int attacker = state->piece_at(us, action.first.first, action.first.second);
+            int score = 10000 + (PIECE_VALUES[victim] * 10) - PIECE_VALUES[attacker];
+            captures.push_back({action, score});
+        }
+    }
+
+    //Sort captures with MVV-LVA
+    std::sort(captures.begin(), captures.end(), [](const ScoredMove& a, const ScoredMove& b) {
+        return a.score > b.score;
+    });
+
+    /* Negamax loop */
+    for (const auto& sm : captures) {
+        State* next = state->next_state(sm.move);
+        bool same = next->same_player_as_parent();
+        int score;
+
+        if (same) {
+            score = quiescence(next, alpha, beta, history, ply + 1, ctx, p);
+        } else {
+            score = -quiescence(next, -beta, -alpha, history, ply + 1, ctx, p);
+        }
+
+        delete next;
+
+        if (score > alpha) {
+            alpha = score;
+        }
+        if (alpha >= beta) {
+            return alpha; // Beta Cutoff
+        }
+    }
+
+    return alpha;
+}
+
+
  int MiniMax::eval_ctx(
     State *state,
     int depth,
@@ -58,9 +139,8 @@ struct ScoredMove {
     history.push(state->hash());
 
     if(depth <= 0){
-        int score = state->evaluate(
-            p.use_kp_eval, p.use_eval_mobility, &history
-        ); 
+        //extend lookahead phase when reaching max depth
+        int score = quiescence(state, alpha, beta, history, ply, ctx, p);
         history.pop(state->hash());
         return score;
     }
