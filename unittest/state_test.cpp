@@ -4,7 +4,7 @@
 #include <chrono>
 #include <cstdlib>
 
-#include "../src/games/minichess/state.hpp"
+#include "../src/games/minichess/114006214_state.hpp"
 #include "../src/games/minichess/config.hpp"
 
 

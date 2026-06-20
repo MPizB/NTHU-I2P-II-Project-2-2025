@@ -1,6 +1,6 @@
 #include <utility>
-#include "state.hpp"
-#include "minimax.hpp"
+#include "114006214_state.hpp"
+#include "114006214_submission.hpp"
 
 
 /*============================================================
